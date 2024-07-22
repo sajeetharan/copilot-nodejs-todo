@@ -324,85 +324,61 @@ To do that, delete the `readTasks()` function entirely and replace it with the c
 The final result should look like this:
 
 ```ts
-// Import Cosmos SDK and task model
-import { CosmosClient } from "@azure/cosmos";
-import { Task } from "../models/task";
+// Import Azure Cosmos SDK and task model
+import { CosmosClient } from '@azure/cosmos';
+import { Task } from '../models/task';
 
-// Create a DbService class to wrap the Cosmos SDK,
+// Create a DbService class to wrap the  Cosmos SDK with URI and key,
 // connecting to the 'todos' database and 'tasks' container
-// and with CRUD methods for tasks
+// and with CRUD methods for tasks with proper naming
 export class DbService {
   private client: CosmosClient;
-  private database: any;
-  private container: any;
+  private container;
 
   constructor() {
     // Check that the environment variables are set
-    if (!process.env.COSMOS_ENDPOINT) {
-      throw new Error("COSMOS_ENDPOINT is not set");
+    if (!process.env.COSMOS_ENDPOINT || !process.env.COSMOS_KEY) {
+      throw new Error('Please provide COSMOS_ENDPOINT and COSMOS_KEY in the environment');
     }
-    if (!process.env.COSMOS_KEY) {
-      throw new Error("COSMOS_KEY is not set");
-    }
-
-    // Connect to the database
     this.client = new CosmosClient({
       endpoint: process.env.COSMOS_ENDPOINT,
-      key: process.env.COSMOS_KEY
+      key: process.env.COSMOS_KEY,
     });
-    this.database = this.client.database("todos");
-    this.container = this.database.container("tasks");
+
+    this.container = this.client
+      .database('todos')
+      .container('tasks');
   }
 
-  // Create a new task
-  async createTask(task: Task): Promise<Task> {
-    // Create a new task in the database
-    const { resource: createdItem } = await this.container.items.create(task);
-
-    // Return the new task
-    return createdItem;
-  }
-
-  // Get a task by id
-  async getTask(id: string): Promise<Task> {
-    // Get the task from the database
-    const { resource: task } = await this.container.item(id).read();
-
-    // Return the task
-    return task;
-  }
-
-  // Get all tasks for a user
+  // get all tasks based on userId
   async getTasks(userId: string): Promise<Task[]> {
-    // Get the tasks from the database
-    const { resources: tasks } = await this.container
-      .items.query({
-        query: "SELECT * FROM c WHERE c.userId = @userId",
-        parameters: [{ name: "@userId", value: userId }]
-      })
-      .fetchAll();
+    const querySpec = {
+      query: 'SELECT * FROM c WHERE c.userId = @userId',
+      parameters: [
+        {
+          name: '@userId',
+          value: userId,
+        },
+      ],
+    };
 
-    // Return the tasks
-    return tasks;
+    const { resources } = await this.container.items.query(querySpec).fetchAll();
+    return resources;
   }
 
-  // Update a task
-  async updateTask(task: Task): Promise<Task> {
-    // Update the task in the database
-    const { resource: updatedItem } = await this.container
-      .item(task.id)
-      .replace(task);
-
-    // Return the updated task
-    return updatedItem;
+  async createTask(task: Task) {
+    await this.container.items.create(task);
   }
 
-  // Delete a task
-  async deleteTask(id: string): Promise<void> {
-    // Delete the task from the database
-    await this.container.item(id).delete();
+  async updateTask(task: Task) {
+    await this.container.item(task.id).replace(task);
+  }
+
+  async deleteTask(task: Task) {
+    await this.container.item(task.id).delete();
   }
 }
+
 ```
 
 Of course, the code might not perfect (remember that the suggestions you get may be a bit different), but it's a good start given the little effort we had to put in. It's missing some type definitions, but keeping in mind that we only had to write a few comments to get a working database service, it's pretty amazing! And we didn't even had to go read the documentation of the Cosmos SDK.
@@ -460,50 +436,30 @@ public static getInstance(): DbService {
   }
   return DbService.instance;
 }
+
+```
+
+or you can type the comment as,
+
+```ts
+// Create a singleton instance and get the DbService
 ```
 
 Don't you agree that this looks like black magic? We didn't even tell Copilot what we wanted, and it just gave us the code we needed. How useful is that?
 
 ### (Optional) Fix missing types with Copilot chat
 
-Our database service is now almost perfect, but there's still one thing that bothers me: the types. We're using `any` for the `database` and `container` properties, which is not ideal. We could go back to the Cosmos SDK documentation and try to find the right types, but that would be a lot of work. Let's see if Copilot can help us with that.
+Our database service is now almost perfect, but there's still one thing that would bother you : the types. You can make use of Copilot chat to make your code better by applying an auto fix.
 
 In the VS Code toolbar, select the `Copilot Chat` from the menu:
 
-![Screenshot of Copilot Labs tab in VS Code](./assets/copilot-labs.png)
+![Screenshot of Copilot Labs tab in VS Code](./assets/copilot-chat.png)
 
-Select the two problematic lines in your code:
+You can click on `/Fix the problems in my code`
 
-```ts
-private database: any;
-private container: any;
-```
+![Screenshot of VS Code ](./assets/copilot-chat-fix.png)
 
-Once they're highlighted, click on the **Add types** button in the **Brushes** panel:
-
-![Screenshot of Copilot Labs brushes panel in VS Code highlighting the "Add Types" button](./assets/copilot-labs-add-types.png)
-
-Copilot will now try to find the right types for your variables. It will take a few seconds, but once it's done, you should see something like this:
-
-```ts
-private database: Database;
-private container: Container;
-```
-
-<div class="info" data-title="note">
-
-> Copilot Labs is still in beta, so it might not work perfectly every time. If it doesn't, you can always use `CTRL+Z` (`CMD+Z` on macOS) to undo the changes, and try again.
-
-</div>
-
-TypeScript is showing us an error now, because we're using the `Database` and `Container` types from the Cosmos SDK, but we didn't import them. Click on the blue lightbulb to open VS Code's quick fixes options, and select **Add all missing imports**:
-
-![Screenshot of VS Code ](./assets/vscode-auto-import.png)
-
-Oh no, once we do that we get new errors! It seems that the return types of the `createTask()` and `updateTask()` methods are wrong. Replace `Promise<Task>` with `Promise<Task | undefined>` for both methods, and you should be good to go.
-
-Thanks for the catch, TypeScript! 🙏
-
+This helps a lot in fixing Typescript errors without spending so much time, Thanks Copilot Chat🙏
 ---
 
 ## Add unit tests
@@ -681,53 +637,52 @@ Then move the `read()`, `upsert()` and `delete()` methods from the `items` block
 You should end up with something like this:
 
 ```ts
-const mockClient = {
-  database: () => ({
-    container: () => ({
-      items: {
-        create: () => ({
-          resource: {
-            id: '123',
-            userId: '123',
-            title: 'test',
-            completed: false
-          }
-        }),
-        query: () => ({
-          fetchAll: () => ({
-            resources: []
-          })
-        }),
-      },
-      item: () => ({
-        read: () => ({
-          resource: {
-            id: '123',
-            userId: '123',
-            title: 'test',
-            completed: false
-          }
-        }),
-        upsert: () => ({
-          resource: {
-            id: '123',
-            userId: '123',
-            title: 'test',
-            completed: true
-          }
-        }),
-        delete: () => ({})
-      }),
-    })
-  })
-};
+    const mockClient = {
+      database: () => ({
+        container: () => ({
+          items: {
+            create: () => ({
+              resource: {
+                id: '123',
+                userId: '123',
+                title: 'test',
+                completed: false
+              }
+            }),
+            query: () => ({
+              fetchAll: () => ({
+                resources: []
+              })
+            }),
+          },
+          item: () => ({
+            read: () => ({
+              resource: {
+                id: '123',
+                userId: '123',
+                title: 'test',
+                completed: false
+              }
+            }),
+            replace: () => ({
+              resource: {
+                id: '123',
+                userId: '123',
+                title: 'test',
+                completed: true
+              }
+            }),
+            delete: () => ({})
+          }),
+        })
+      })
+    };
+    const CosmosClient = require('@azure/cosmos').CosmosClient;
+    CosmosClient.mockImplementation(() => mockClient);
+  });
 ```
 
-Run the tests again, and... one last failure!
-
-![Screenshot of jest output showing the third test failure](./assets/jest-test-failure-3.png)
-
-That's right, Copilot mocked an `upsert()` method, but not a `replace()` method. Just rename `upsert` to `replace` and this time, all tests should pass!
+Run the tests again, and... done!
 
 We've seen in this example that Copilot can help us write tests and mocks, but cannot do it all by itself. It needs some context to be able to suggest the right code, and sometimes we need to help it out a bit.
 In the end, we still have our test suite written with very little effort and time!
@@ -1044,6 +999,61 @@ Check that the settings name are `COSMOS_ENDPOINT` and `COSMOS_KEY`, as it's imp
 </div>
 
 All good! Now we should be set and ready to deploy.
+
+Here is the final version of deploy.yml should look like,
+
+```yaml
+# This workflow for our node.js 18 app does the following:
+# - run tests
+# - build the app
+# - login to Azure with AZURE_CREDENTIALS github secret
+# - run Azure CLI command to deploy
+
+name: Deploy to Azure
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js 18
+        uses: actions/setup-node@v2
+        with:
+          node-version: 18
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Deploy to Azure
+        run: |
+          # Create resource group rg-copilot-nodejs-todo
+          az group create --name rg-copilot-nodejs-todo --location eastus
+          # Create cosmosdb with default api
+          az cosmosdb create --name copilot-nodejs-todo --resource-group rg-copilot-nodejs-todo
+          # Create database todos with collection tasks
+          az cosmosdb sql database create --account-name copilot-nodejs-todo --resource-group rg-copilot-nodejs-todo --name todos
+          az cosmosdb sql container create --account-name copilot-nodejs-todo --resource-group rg-copilot-nodejs-todo --database-name todos --name tasks --partition-key-path /_partitionKey --throughput 400
+          # Deploy webapp using node 18
+          az webapp up --sku F1 --name nodejs-todo-sinedied --resource-group rg-copilot-nodejs-todo --runtime "node|18-lts"
+          # Retrieve cosmos endpoint
+          cosmos_endpoint=$(az cosmosdb show --name copilot-nodejs-todo --resource-group rg-copilot-nodejs-todo --query documentEndpoint --output tsv)
+          # Retrieve cosmos key
+          cosmos_key=$(az cosmosdb keys list --name copilot-nodejs-todo --resource-group rg-copilot-nodejs-todo --query primaryMasterKey --output tsv)
+          # Set cosmos variables in web app
+          az webapp config appsettings set --name nodejs-todo-sinedied --resource-group rg-copilot-nodejs-todo --settings COSMOS_ENDPOINT=$cosmos_endpoint COSMOS_KEY=$cosmos_key --output none
+
+```
 
 ### Deploying the application
 
